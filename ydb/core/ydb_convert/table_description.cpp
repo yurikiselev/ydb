@@ -297,14 +297,14 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
     }
 
     if (OpType == EAlterOperationKind::Common) {
-        modifyScheme->SetOperationType(
-            NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
         auto desc = modifyScheme->MutableAlterTable();
         desc->SetName(name);
 
         for (const auto &drop : req->drop_columns()) {
             desc->AddDropColumns()->SetName(drop);
+            modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumn);
         }
 
         if (!FillColumnDescription(*desc, req->add_columns(), code, error)) {

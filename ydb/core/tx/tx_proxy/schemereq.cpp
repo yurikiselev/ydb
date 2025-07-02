@@ -171,6 +171,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
+        case NKikimrSchemeOp::ESchemeOpDropColumn:
             return *modifyScheme.MutableAlterTable()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
@@ -636,7 +637,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     bool ExamineTables(NKikimrSchemeOp::TModifyScheme& pbModifyScheme, const TActorContext& ctx) {
         switch (pbModifyScheme.GetOperationType()) {
-            case NKikimrSchemeOp::ESchemeOpAlterTable: {
+            case NKikimrSchemeOp::ESchemeOpAlterTable:
+            case NKikimrSchemeOp::ESchemeOpDropColumn:
+            {
                 auto path = JoinPath({pbModifyScheme.GetWorkingDir(), GetPathNameForScheme(pbModifyScheme)});
                 if (!CheckTablePrereqs(pbModifyScheme.GetAlterTable(), path, ctx)) {
                     return false;
@@ -710,11 +713,19 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             ResolveForACL.push_back(toResolve);
             break;
         }
-        case NKikimrSchemeOp::ESchemeOpAlterTable:
         case NKikimrSchemeOp::ESchemeOpDropIndex:
+        case NKikimrSchemeOp::ESchemeOpDropCdcStream:
+        case NKikimrSchemeOp::ESchemeOpDropColumn:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | NACLib::EAccessRights::RemoveSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpAlterTable:
         case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterCdcStream:
-        case NKikimrSchemeOp::ESchemeOpDropCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume:
         case NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume:

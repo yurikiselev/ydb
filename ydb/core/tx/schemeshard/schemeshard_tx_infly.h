@@ -709,6 +709,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup: return TxCreatePQGroup;
             case NKikimrSchemeOp::ESchemeOpDropTable: return TxDropTable;
             case NKikimrSchemeOp::ESchemeOpDropPersQueueGroup: return TxDropPQGroup;
+            case NKikimrSchemeOp::ESchemeOpDropColumn: return TxAlterTable;
             case NKikimrSchemeOp::ESchemeOpAlterTable: return TxAlterTable;
             case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup: return TxAlterPQGroup;
             case NKikimrSchemeOp::ESchemeOpModifyACL: return TxModifyACL;

@@ -184,5 +184,8 @@ enum EOperationType {
     // Change Path State
     ESchemeOpChangePathState = 119;
 
+    // Drop
+    ESchemeOpDropColumn = 120;
+
     // Some entries are grouped by semantics, so are out of order
 }

@@ -83,6 +83,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
 
         // Simple operations that alter paths
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumn:
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
         case NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL:
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume:
