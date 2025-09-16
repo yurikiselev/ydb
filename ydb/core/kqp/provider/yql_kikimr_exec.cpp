@@ -440,7 +440,9 @@ namespace {
     TSecretSettings ParseSecretSettings(TKiCreateSecret createSecret) {
         TSecretSettings settings;
         settings.Name = TString(createSecret.Secret());
-        settings.Value = TString(createSecret.Value());
+        if (auto value = createSecret.Value().Maybe<TCoAtom>()) {
+            settings.Value = TString(value.Cast().Value());
+        }
         settings.InheritPermissions = FromString<bool>(TString(createSecret.InheritPermissions()));
         return settings;
     }

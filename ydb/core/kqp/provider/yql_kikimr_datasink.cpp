@@ -1968,6 +1968,7 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
     Y_UNUSED(ctx);
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> value;
+    TMaybeNode<TCoAtom> valueParamName;
     TMaybeNode<TCoAtom> inheritPermissions;
 
     for (auto child : node) {
@@ -1978,9 +1979,14 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 mode = tuple.Value().Cast<TCoAtom>();
             } else if (name == "value") {
-                // TODO(yurikiselev): support parsing from declare
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-                value = tuple.Value().Cast<TCoAtom>();
+                if (tuple.Value().Maybe<TCoAtom>()) {
+                    value = tuple.Value().Cast<TCoAtom>();
+                } else {
+                    const auto param = TExprBase(tuple.Value().Ref().Child(0)).Cast<TCoParameter>();
+                    if (param.Name().Maybe<TCoAtom>()) {
+                        valueParamName = param.Name().Cast<TCoAtom>();
+                    }
+                }
             } else if (name == "inherit_permissions") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 inheritPermissions = tuple.Value().Cast<TCoAtom>();
@@ -1988,7 +1994,7 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
         }
     }
 
-    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(inheritPermissions));
+    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(valueParamName), std::move(inheritPermissions));
 }
 
 IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output,
