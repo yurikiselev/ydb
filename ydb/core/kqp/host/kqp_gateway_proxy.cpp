@@ -3059,7 +3059,11 @@ public:
         }
 
         void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
-            op.SetValue(settings.Value);
+            if (TStringBuf(settings.Value).StartsWith("$")) {
+                op.SetValueParamName(settings.Value);
+            } else {
+                op.SetValue(settings.Value);
+            }
             op.SetInheritPermissions(settings.InheritPermissions);
         }
 

@@ -69,12 +69,13 @@ public:
     }
 
     TKqpSchemeExecuter(
-        TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target, const TMaybe<TString>& requestType,
+        TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, TQueryData::TPtr queryData, const TActorId& target, const TMaybe<TString>& requestType,
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
         bool temporary, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx,
         const TActorId& kqpTempTablesAgentActor)
         : PhyTx(phyTx)
         , QueryType(queryType)
+        , QueryData(queryData)
         , Target(target)
         , Database(database)
         , UserToken(userToken)
@@ -487,7 +488,14 @@ public:
             }
 
             case NKqpProto::TKqpSchemeOperation::kCreateSecret: {
-                const auto& modifyScheme = schemeOp.GetCreateSecret();
+                auto modifyScheme = schemeOp.GetCreateSecret();
+                if (modifyScheme.GetCreateSecret().HasValueParamName()) {
+                    const TString& paramName = modifyScheme.GetCreateSecret().GetValueParamName();
+                    if (QueryData && QueryData->GetParameterUnboxedValuePtr(paramName)) {
+                        const TString paramValue = TString(QueryData->GetParameterUnboxedValuePtr(paramName)->second.AsStringRef());
+                        modifyScheme.MutableCreateSecret()->SetValue(paramValue);
+                    }
+                }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
@@ -935,6 +943,7 @@ private:
 private:
     TKqpPhyTxHolder::TConstPtr PhyTx;
     const NKikimrKqp::EQueryType QueryType;
+    const TQueryData::TPtr QueryData;
     const TActorId Target;
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -953,13 +962,13 @@ private:
 } // namespace
 
 IActor* CreateKqpSchemeExecuter(
-    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
+    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, TQueryData::TPtr queryData, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress, bool temporary, TString sessionId,
     TIntrusivePtr<TUserRequestContext> ctx, const TActorId& kqpTempTablesAgentActor)
 {
     return new TKqpSchemeExecuter(
-        phyTx, queryType, target, requestType, database, userToken, clientAddress,
+        phyTx, queryType, queryData, target, requestType, database, userToken, clientAddress,
         temporary, sessionId, std::move(ctx), kqpTempTablesAgentActor);
 }
 

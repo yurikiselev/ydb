@@ -230,6 +230,7 @@ public:
         NKikimrSchemeOp::TSecretDescription secretDescription;
         secretDescription.SetName(createSecretProto.GetName());
         secretDescription.SetValue(createSecretProto.GetValue());
+        Cerr << "zzz CreateSecretOp: value = " << createSecretProto.GetValue() << "|\n";
 
         const auto secretInfo = TSecretInfo::Create(std::move(secretDescription));
         context.SS->Secrets[secretPathId] = secretInfo;
