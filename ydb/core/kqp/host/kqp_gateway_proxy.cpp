@@ -3059,10 +3059,10 @@ public:
         }
 
         void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
-            if (settings.ValueParamName) {
-                op.SetValueParamName(settings.Value);
-            } else {
+            if (settings.Value) {
                 op.SetValue(settings.Value);
+            } else {
+                op.SetValueParamName(settings.ValueParamName);
             }
             op.SetInheritPermissions(settings.InheritPermissions);
         }
@@ -3094,10 +3094,10 @@ public:
         }
 
         void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
-            if (settings.ValueParamName) {
-                op.SetValueParamName(settings.Value);
-            } else {
+            if (settings.Value) {
                 op.SetValue(settings.Value);
+            } else {
+                op.SetValueParamName(settings.ValueParamName);
             }
         }
 

@@ -1839,7 +1839,10 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
-                        .Value(settings.Value.Cast())
+                        .Value(settings.Value.IsValid() ? settings.Value.Cast() : settings.ValueParamName.Cast())
+                        .ValueFromParam<TCoAtom>()
+                            .Value(settings.Value.IsValid() ? false : true)
+                            .Build()
                         .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : Build<TCoAtom>(ctx, node->Pos()).Value("0").Done())
                         .Done()
                         .Ptr();

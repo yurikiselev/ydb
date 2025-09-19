@@ -441,7 +441,11 @@ namespace {
         TSecretSettings settings;
         settings.Name = TString(createSecret.Secret());
         if (auto value = createSecret.Value().Maybe<TCoAtom>()) {
-            settings.Value = TString(value.Cast().Value());
+            if (bool valueFromParam = createSecret.ValueFromParam().Value() == "1") {
+                settings.ValueParamName = TString(value.Cast().Value());
+            } else {
+                settings.Value = TString(value.Cast().Value());
+            }
         }
         settings.InheritPermissions = FromString<bool>(TString(createSecret.InheritPermissions()));
         return settings;
