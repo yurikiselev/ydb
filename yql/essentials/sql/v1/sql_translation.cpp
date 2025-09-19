@@ -4948,12 +4948,15 @@ bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDef
     return true;
 }
 
-TString TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node) {
-    TString paramName;
+bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TString& paramName) {
     if (!NamedNodeImpl(node, paramName, *this)) {
-        return "";
+        return false;
     }
-    return paramName;
+    auto named = GetNamedNode(paramName);
+    if (!named) {
+        return false;
+    }
+    return true;
 }
 
 bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result) {
@@ -5171,8 +5174,12 @@ bool TSqlTranslation::StoreSecretValue(
             break;
         }
         case TRule_secret_setting_value::kAltSecretSettingValue3: {
-            TString paramName = BindParameterClause(value.GetAlt_secret_setting_value3().GetRule_bind_parameter1());
-            secretParams.Value = TDeferredAtom(Ctx_.Pos(), paramName);
+            TString paramName;
+            if (!BindParameterClause(value.GetAlt_secret_setting_value3().GetRule_bind_parameter1(), paramName)) {
+                errToken = &value.GetAlt_secret_setting_value3().GetRule_bind_parameter1().GetToken1();
+            } else {
+                secretParams.ValueParamName = TDeferredAtom(Ctx_.Pos(), paramName);
+            }
             break;
         }
         case TRule_secret_setting_value::kAltSecretSettingValue2: {

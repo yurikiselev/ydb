@@ -4087,7 +4087,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'create"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"($foo)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"('"value_param_name" '"$foo")"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value")"));
                 UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
             }
         };
@@ -4110,7 +4111,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'create"));
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-value"));
+                    UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"("value" '"secret-value")"));
+                    UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"('"value_param_name" '"$foo")"));
                     UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
                 }
             };
@@ -4245,7 +4247,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'alter"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"($foo)"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"('"value_param_name" '"$foo")"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"("value")"));
                 UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
             }
         };
@@ -4267,7 +4270,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Key '('secret"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'mode 'alter"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-name"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("secret-value"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"("value" '"secret-value")"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find(R"('"value_param_name" '"$foo")"));;
                 UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("inherit_permissions"));
             }
         };

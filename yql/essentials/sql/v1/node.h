@@ -1333,6 +1333,7 @@ namespace NSQLTranslationV1 {
         };
 
         TMaybe<TDeferredAtom> Value;
+        TMaybe<TDeferredAtom> ValueParamName;
         TMaybe<TDeferredAtom> InheritPermissions;
 
     public:
