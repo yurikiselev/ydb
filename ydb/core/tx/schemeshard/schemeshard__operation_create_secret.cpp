@@ -123,6 +123,7 @@ public:
         const auto acceptExisting = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& createSecretProto = Transaction.GetCreateSecret();
+Cerr << "zzz CreateSecretOp: value = " << createSecretProto.GetValue() << "|\n";
 
         const TString& secretName = createSecretProto.GetName();
 
@@ -230,7 +231,6 @@ public:
         NKikimrSchemeOp::TSecretDescription secretDescription;
         secretDescription.SetName(createSecretProto.GetName());
         secretDescription.SetValue(createSecretProto.GetValue());
-        Cerr << "zzz CreateSecretOp: value = " << createSecretProto.GetValue() << "|\n";
 
         const auto secretInfo = TSecretInfo::Create(std::move(secretDescription));
         context.SS->Secrets[secretPathId] = secretInfo;

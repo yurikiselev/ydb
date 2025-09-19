@@ -3059,7 +3059,7 @@ public:
         }
 
         void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
-            if (TStringBuf(settings.Value).StartsWith("$")) {
+            if (settings.ValueParamName) {
                 op.SetValueParamName(settings.Value);
             } else {
                 op.SetValue(settings.Value);
@@ -3094,7 +3094,11 @@ public:
         }
 
         void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
-            op.SetValue(settings.Value);
+            if (settings.ValueParamName) {
+                op.SetValueParamName(settings.Value);
+            } else {
+                op.SetValue(settings.Value);
+            }
         }
 
     private:

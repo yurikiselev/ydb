@@ -1982,6 +1982,10 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
                 if (tuple.Value().Maybe<TCoAtom>()) {
                     value = tuple.Value().Cast<TCoAtom>();
                 }
+            } else if (name == "value_param_name") {
+                if (tuple.Value().Maybe<TCoAtom>()) {
+                    valueParamName = tuple.Value().Cast<TCoAtom>();
+                }
             } else if (name == "inherit_permissions") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 inheritPermissions = tuple.Value().Cast<TCoAtom>();
