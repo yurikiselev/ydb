@@ -108,17 +108,35 @@ IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector
 
 }  // anonymous namespace
 
-void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
-    LOG_D("TEvResolveSecret: names=" << JoinSeq(',', ev->Get()->SecretNames) << ", request cookie=" << LastCookie);
+void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecretWithPromise::TPtr& ev) {
+    LOG_D("TEvResolveSecretWithPromise: names=" << JoinSeq(',', ev->Get()->SecretNames) << ", request cookie=" << LastCookie);
 
     if (ev->Get()->SecretNames.empty()) {
-        LOG_W("TEvResolveSecret: request cookie=" << ev->Cookie << ", empty secret names list");
+        LOG_W("TEvResolveSecretWithPromise: request cookie=" << ev->Cookie << ", empty secret names list");
         static const auto emptyRequest = TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("empty secret names list") });
         ev->Get()->Promise.SetValue(emptyRequest);
         return;
     }
 
     SaveIncomingRequestInfo(*ev->Get());
+    SendSchemeCacheRequests(*ev->Get());
+}
+
+void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecretWithEvent::TPtr& ev) {
+    LOG_D("TEvResolveSecretWithEvent: names=" << JoinSeq(',', ev->Get()->SecretNames) << ", request cookie=" << LastCookie);
+
+    if (ev->Get()->SecretNames.empty()) {
+        LOG_W("TEvResolveSecretWithEvent: request cookie=" << ev->Cookie << ", empty secret names list");
+        Send(
+            ev->Sender,
+            new TEvResolveSecretResponse(TEvResolveSecretResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("empty secret names list") })),
+            0,
+            ev->Cookie
+        );
+        return;
+    }
+
+    SaveIncomingRequestInfo(*ev->Get(), ev->Sender, ev->Cookie);
     SendSchemeCacheRequests(*ev->Get());
 }
 
@@ -200,7 +218,21 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
 
 void TDescribeSchemaSecretsService::FillResponse(const ui64& requestId, const TEvDescribeSecretsResponse::TDescription& response) {
     auto respIt = ResolveInFlight.find(requestId);
-    respIt->second.Result.SetValue(response);
+    if (respIt->second.Result) {
+        respIt->second.Result->SetValue(response);
+    } else {
+        Y_ENSURE(respIt->second.SenderActorInfo, "Either sender actor info, or promise must be set for response");
+        Send(
+            respIt->second.SenderActorInfo->ActorId,
+            new TEvResolveSecretResponse(
+                response.SecretValues.empty()
+                    ? TEvResolveSecretResponse::TDescription(response.Status, response.Issues)
+                    : TEvResolveSecretResponse::TDescription(response.SecretValues)
+            ),
+            0,
+            respIt->second.SenderActorInfo->Cookie
+        );
+    }
     ResolveInFlight.erase(respIt);
 }
 
@@ -209,16 +241,27 @@ void TDescribeSchemaSecretsService::Bootstrap() {
     Become(&TDescribeSchemaSecretsService::StateWait);
 }
 
-void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecret& ev) {
+void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecretWithPromise& ev) {
     TResponseContext ctx;
     for (size_t i = 0; i < ev.SecretNames.size(); ++i) {
-        ctx.Secrets[ev.SecretNames[i]] = i;
-        ctx.Result = ev.Promise;
+        ctx.Secrets[ev.SecretNames[i]] = i;        
     }
+    ctx.Result = ev.Promise;
     ResolveInFlight[LastCookie] = std::move(ctx);
 }
 
-void TDescribeSchemaSecretsService::SendSchemeCacheRequests(const TEvResolveSecret& ev) {
+void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecretWithEvent& ev,
+    const TActorId& actorId, const ui64 cookie
+) {
+    TResponseContext ctx;
+    for (size_t i = 0; i < ev.SecretNames.size(); ++i) {
+        ctx.Secrets[ev.SecretNames[i]] = i;
+    }
+    ctx.SenderActorInfo = TSenderActorInfo(cookie, actorId);
+    ResolveInFlight[LastCookie] = std::move(ctx);
+}
+
+void TDescribeSchemaSecretsService::SendSchemeCacheRequests(const TEvResolveSecretBase& ev) {
     const auto userToken = ev.UserToken;
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
     for (const auto& secretName : ev.SecretNames) {
@@ -327,7 +370,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
         if (schemaSecrets) {
             actorSystem->Send(
                 MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
-                new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, database, secretNames, promise)
+                new TEvResolveSecretWithPromise(userToken, database, secretNames, promise)
             );
             return promise.GetFuture();
         }
