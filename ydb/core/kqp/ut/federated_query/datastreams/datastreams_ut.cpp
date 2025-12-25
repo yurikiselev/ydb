@@ -111,10 +111,6 @@ public:
                 AppConfig.emplace();
             }
 
-            auto& featureFlags = *AppConfig->MutableFeatureFlags();
-            featureFlags.SetEnableStreamingQueries(true);
-            featureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
-
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);
 
@@ -132,7 +128,7 @@ public:
                 .UseLocalCheckpointsInStreamingQueries = true,
             });
 
-            Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
+            Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableStreamingQueries(true);
         }
 
@@ -425,13 +421,13 @@ public:
 
     void CreateYdbSource(const TString& ydbSourceName) {
         ExecQuery(fmt::format(R"(
-            UPSERT OBJECT ydb_source_secret (TYPE SECRET) WITH (value = "{token}");
+            CREATE SECRET ydb_source_secret WITH (value = "{token}");
             CREATE EXTERNAL DATA SOURCE `{ydb_source}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{ydb_location}",
                 DATABASE_NAME = "{ydb_database_name}",
                 AUTH_METHOD = "TOKEN",
-                TOKEN_SECRET_NAME = "ydb_source_secret",
+                TOKEN_SECRET_PATH = "ydb_source_secret",
                 USE_TLS = "FALSE"
             );)",
             "ydb_source"_a = ydbSourceName,
