@@ -125,11 +125,15 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
+            const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            const bool requireCountersAuth = enforceUserToken &&
+                KikimrRunConfig.AppConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false,
+                .UseAuth = requireCountersAuth,
+                .AllowedSIDs = requireCountersAuth ? databaseAllowedSIDs : TVector<TString>(),
             });
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
