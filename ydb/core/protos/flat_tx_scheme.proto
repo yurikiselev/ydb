@@ -69,7 +69,7 @@ message TFetcherCheckUserTieringPermissionsResult {
 }
 
 message TFetcherCheckUserTieringPermissions {
-    optional bytes UserToken = 1;
+    optional bytes UserToken = 1 [(Ydb.sensitive) = true];
     repeated string TieringRuleIds = 2;
     optional string ActivityType = 3;
 }
@@ -126,7 +126,7 @@ message TEvDescribeSchemeResult {
 message TEvCancelTx {
     optional uint64 TargetTxId = 1;
     optional string Path = 2;
-    optional string SecurityToken = 3;
+    optional string SecurityToken = 3 [(Ydb.sensitive) = true];
     optional uint64 TxId = 4;
 }
 
@@ -167,7 +167,7 @@ message TEvLogin {
 
 message TEvLoginResult {
     optional string Error = 1;
-    optional string Token = 2;  // signed jwt token
+    optional string Token = 2 [(Ydb.sensitive) = true];  // signed jwt token
     optional string SanitizedToken = 3;  // sanitized token without signature
     optional bool IsAdmin = 4;
     optional string ServerSignature = 5; // for SASL SCRAM auth
