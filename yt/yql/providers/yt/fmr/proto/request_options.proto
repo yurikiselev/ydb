@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 package NYql.NFmr.NProto;
 
 enum EOperationStatus {
@@ -283,7 +285,7 @@ message TTaskParams {
 message TClusterConnection {
     string TransactionId = 1;
     string YtServerName = 2;
-    optional string Token = 3;
+    optional string Token = 3 [(Ydb.sensitive) = true];
 }
 
 message TFileInfo {
