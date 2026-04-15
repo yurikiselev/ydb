@@ -5,6 +5,7 @@ package Ydb.Scripting;
 option java_package = "com.yandex.ydb.scripting";
 option java_outer_classname = "ScriptingProtos";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 
@@ -21,6 +22,7 @@ message ExecuteYqlRequest {
     map<string, TypedValue> parameters = 3;
     Ydb.Table.QueryStatsCollection.Mode collect_stats = 4;
     Ydb.Query.Syntax syntax = 5;
+    map<string, TypedValue> sensitive_parameters = 6 [(Ydb.sensitive) = true];
 }
 
 message ExecuteYqlResponse {

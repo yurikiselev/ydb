@@ -7,6 +7,7 @@ option java_outer_classname = "QueryProtos";
 
 import "google/protobuf/duration.proto";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_formats.proto";
@@ -224,6 +225,8 @@ message ExecuteQueryRequest {
 
     // Format settings, only used for Ydb.ResultSet.Format.FORMAT_ARROW
     Ydb.Formats.ArrowFormatSettings arrow_format_settings = 14;
+
+    map<string, TypedValue> sensitive_parameters = 15 [(Ydb.sensitive) = true];
 }
 
 message ResultSetMeta {
@@ -264,6 +267,8 @@ message ExecuteScriptRequest {
     google.protobuf.Duration results_ttl = 6;
 
     string pool_id = 7; // Workload manager pool id
+
+    map<string, TypedValue> sensitive_parameters = 8 [(Ydb.sensitive) = true];
 }
 
 enum ExecStatus {

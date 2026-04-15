@@ -1,6 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
@@ -1312,6 +1313,7 @@ message ExecuteDataQueryRequest {
     QueryCachePolicy query_cache_policy = 5;
     Ydb.Operations.OperationParams operation_params = 6;
     QueryStatsCollection.Mode collect_stats = 7;
+    map<string, TypedValue> sensitive_parameters = 8 [(Ydb.sensitive) = true];
 }
 
 message ExecuteDataQueryResponse {
@@ -1661,6 +1663,7 @@ message ExecuteScanQueryRequest {
     // works only in mode: MODE_EXPLAIN,
     // collects additional diagnostics about query compilation, including query plan and scheme
     bool collect_full_diagnostics = 9 [deprecated=true];
+    map<string, TypedValue> sensitive_parameters = 10 [(Ydb.sensitive) = true];
 }
 
 message ExecuteScanQueryPartialResponse {
