@@ -11,11 +11,14 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/audit/audit_config/audit_config.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/grpc_services/http_database_access_verdict.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/security/secure_request.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -213,6 +216,7 @@ public:
         , SkipCheckConnectRights_(skipCheckConnectRights)
         , FacilityProvider_(facilityProvider)
         , CloudPermissionsSettings(cloudPermissionsSettings)
+        , RequestSchemeData_(schemeData)
     {
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
@@ -244,6 +248,14 @@ public:
         }
 
         GrpcRequestBaseCtx_->SetCounters(Counters_);
+
+        if constexpr (IsHttpRequest) {
+            if (AppData()->FeatureFlags.GetEnableDatabaseAccessCheckLoggingForHttpMonitoring()
+                && IsStrictDatabaseOnlyToken(AppData(), TBase::GetSerializedToken()))
+            {
+                HttpDatabaseAccessVerdict_ = EvaluateHttpDatabaseAccessVerdict();
+            }
+        }
 
         if (!CheckedDatabaseName_.empty()) {
             GrpcRequestBaseCtx_->UseDatabase(CheckedDatabaseName_);
@@ -654,6 +666,8 @@ private:
         // way as for grpc API
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
 
+        ev->Get()->UseDatabase(CheckedDatabaseName_);
+        ev->Get()->DatabaseAccessVerdict = HttpDatabaseAccessVerdict_;
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
         PassAway();
     }
@@ -726,7 +740,9 @@ private:
             return {false, std::nullopt};
         }
 
-        Counters_->IncDatabaseAccessDenyCounter();
+        if (!(IsHttpRequest && AppData()->FeatureFlags.GetEnableDatabaseAccessCheckLoggingForHttpMonitoring())) {
+            Counters_->IncDatabaseAccessDenyCounter();
+        }
 
         if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
             return {false, std::nullopt};
@@ -741,6 +757,56 @@ private:
         );
 
         return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};;
+    }
+
+    EHttpDatabaseAccessVerdict EvaluateHttpDatabaseAccessVerdict() const {
+        const auto rawDatabase = GrpcRequestBaseCtx_->GetDatabaseName();
+        if (!rawDatabase || rawDatabase->empty()) {
+            return EHttpDatabaseAccessVerdict::EmptyDatabase;
+        }
+
+        const auto& domainDescription = RequestSchemeData_.GetPathDescription().GetDomainDescription();
+        const auto domainKey = TPathId::FromDomainKey(domainDescription.GetDomainKey());
+        const auto resourceDomainKey = TPathId::FromDomainKey(domainDescription.GetResourcesDomainKey());
+        const auto schemePathType = RequestSchemeData_.GetPathDescription().GetSelf().GetPathType();
+        const auto& self = RequestSchemeData_.GetPathDescription().GetSelf();
+        const auto selfPathId = TPathId(self.GetSchemeshardId(), self.GetPathId());
+        const bool isDatabaseRootPath = domainKey == selfPathId;
+        const bool isSharedHostDatabase = resourceDomainKey == domainKey
+            && CheckedDatabaseName_ == AppData()->TenantName;
+
+        const TString rootDatabase = CanonizePath(AppData()->DomainsInfo->GetDomain()->Name);
+        if (CheckedDatabaseName_ == rootDatabase) {
+            return EHttpDatabaseAccessVerdict::RootDatabase;
+        }
+
+        const bool isDatabasePathType = schemePathType == NKikimrSchemeOp::EPathTypeSubDomain
+            || schemePathType == NKikimrSchemeOp::EPathTypeExtSubDomain;
+        if (!isDatabasePathType || !isDatabaseRootPath || isSharedHostDatabase) {
+            return EHttpDatabaseAccessVerdict::NotADatabase;
+        }
+
+        if (!SecurityObject_) {
+            return EHttpDatabaseAccessVerdict::NoSecurityObject;
+        }
+
+        const auto& parsedToken = TBase::GetParsedToken();
+        if (!parsedToken) {
+            return EHttpDatabaseAccessVerdict::Ok;
+        }
+
+        const auto& databaseOwner = SecurityObject_->GetOwnerSID();
+        const bool isAdmin = TBase::IsUserAdmin() || IsDatabaseAdministrator(parsedToken.Get(), databaseOwner);
+        if (isAdmin) {
+            return EHttpDatabaseAccessVerdict::Ok;
+        }
+
+        const ui32 access = NACLib::ConnectDatabase;
+        if (SecurityObject_->CheckAccess(access, *parsedToken)) {
+            return EHttpDatabaseAccessVerdict::Ok;
+        }
+
+        return EHttpDatabaseAccessVerdict::NoConnectRight;
     }
 
     const TActorId Owner_;
@@ -759,6 +825,8 @@ private:
     std::unordered_set<TString> DmlAuditExpectedSubjects_;
     NWilson::TSpan Span_;
     TCloudPermissionsSettings CloudPermissionsSettings;
+    EHttpDatabaseAccessVerdict HttpDatabaseAccessVerdict_ = EHttpDatabaseAccessVerdict::Ok;
+    TSchemeBoardEvents::TDescribeSchemeResult RequestSchemeData_;
 };
 
 // default behavior - attributes in schema

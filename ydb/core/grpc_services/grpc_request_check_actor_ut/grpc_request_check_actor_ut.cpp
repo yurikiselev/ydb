@@ -1,9 +1,12 @@
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/grpc_request_check_actor.h>
+#include <ydb/core/grpc_services/http_database_access_verdict.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -336,3 +339,229 @@ Y_UNIT_TEST(CanSetPermissionsForDbWithoutCloudUserAttributes) {
 }
 
 } // CheckCloudPermissions
+
+namespace {
+
+void ConfigureDatabaseOnlyTokenAccess(TTestActorRuntime* runtime) {
+    auto& securityConfig = *runtime->GetAppData().DomainsConfig.MutableSecurityConfig();
+    securityConfig.ClearDatabaseAllowedSIDs();
+    securityConfig.ClearViewerAllowedSIDs();
+    securityConfig.ClearMonitoringAllowedSIDs();
+    securityConfig.ClearAdministrationAllowedSIDs();
+    securityConfig.AddDatabaseAllowedSIDs("user1@as");
+    securityConfig.AddViewerAllowedSIDs("viewer-only@as");
+    securityConfig.AddMonitoringAllowedSIDs("monitoring-only@as");
+    securityConfig.AddAdministrationAllowedSIDs("admin-only@as");
+    runtime->GetAppData().AdministrationAllowedSIDs = {"admin-only@as"};
+}
+
+void ConfigureViewerTokenAccess(TTestActorRuntime* runtime) {
+    auto& securityConfig = *runtime->GetAppData().DomainsConfig.MutableSecurityConfig();
+    securityConfig.ClearDatabaseAllowedSIDs();
+    securityConfig.ClearViewerAllowedSIDs();
+    securityConfig.ClearMonitoringAllowedSIDs();
+    securityConfig.ClearAdministrationAllowedSIDs();
+    securityConfig.AddDatabaseAllowedSIDs("database-only@as");
+    securityConfig.AddViewerAllowedSIDs("user1@as");
+    securityConfig.AddMonitoringAllowedSIDs("monitoring-only@as");
+    securityConfig.AddAdministrationAllowedSIDs("admin-only@as");
+    runtime->GetAppData().AdministrationAllowedSIDs = {"admin-only@as"};
+}
+
+void SetupDedicatedSubDomain(
+    TSchemeBoardEvents::TDescribeSchemeResult& describeSchemeResult,
+    const TString& path,
+    ui64 pathId = 100,
+    ui64 schemeShard = 1)
+{
+    describeSchemeResult.SetPath(CanonizePath(path));
+    auto* pathDescription = describeSchemeResult.MutablePathDescription();
+    auto* self = pathDescription->MutableSelf();
+    const TVector<TString> parts = SplitPath(path);
+    self->SetName(parts.back());
+    self->SetPathType(NKikimrSchemeOp::EPathTypeSubDomain);
+    self->SetPathId(pathId);
+    self->SetSchemeshardId(schemeShard);
+
+    auto* domainDescription = pathDescription->MutableDomainDescription();
+    domainDescription->MutableDomainKey()->SetSchemeShard(schemeShard);
+    domainDescription->MutableDomainKey()->SetPathId(pathId);
+    domainDescription->MutableResourcesDomainKey()->SetSchemeShard(schemeShard);
+    domainDescription->MutableResourcesDomainKey()->SetPathId(pathId);
+}
+
+void SetupSharedHostSubDomain(
+    TTestActorRuntime* runtime,
+    TSchemeBoardEvents::TDescribeSchemeResult& describeSchemeResult,
+    const TString& path,
+    ui64 pathId = 200,
+    ui64 schemeShard = 1)
+{
+    SetupDedicatedSubDomain(describeSchemeResult, path, pathId, schemeShard);
+    runtime->GetAppData().TenantName = CanonizePath(path);
+}
+
+TIntrusivePtr<TSecurityObject> MakeSecurityObjectWithConnect(const TString& userSid) {
+    NACLib::TSecurityObject object("owner", false);
+    object.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::ConnectDatabase, userSid);
+    return MakeIntrusive<TSecurityObject>(object.GetOwnerSID(), object.GetACL().SerializeAsString(), false);
+}
+
+TIntrusivePtr<TSecurityObject> MakeSecurityObjectWithoutConnect() {
+    NACLib::TSecurityObject object("owner", false);
+    return MakeIntrusive<TSecurityObject>(object.GetOwnerSID(), object.GetACL().SerializeAsString(), false);
+}
+
+NGRpcService::TEvRequestAuthAndCheckResult* RunHttpAuthCheck(
+    TTestSetup& setup,
+    const TString& requestDatabase,
+    TSchemeBoardEvents::TDescribeSchemeResult& describeSchemeResult,
+    TIntrusivePtr<TSecurityObject> securityObject,
+    bool enableObserveFlag = true)
+{
+    TTestActorRuntime* runtime = setup.GetRuntime();
+    runtime->GetAppData().FeatureFlags.SetCheckDatabaseAccessPermission(false);
+    if (enableObserveFlag) {
+        runtime->GetAppData().FeatureFlags.SetEnableDatabaseAccessCheckLoggingForHttpMonitoring(true);
+    } else {
+        runtime->GetAppData().FeatureFlags.SetEnableDatabaseAccessCheckLoggingForHttpMonitoring(false);
+    }
+
+    const TString userToken = "Bearer " + setup.UserSid;
+    auto ev = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
+        requestDatabase,
+        TMaybe<TString>(userToken),
+        setup.FakeMonActor,
+        NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
+        "192.168.0.101");
+
+    std::unique_ptr<IEventHandle> ieh = std::make_unique<IEventHandle>(
+        NGRpcService::CreateGRpcRequestProxyId(),
+        setup.FakeMonActor,
+        ev.release(),
+        IEventHandle::FlagTrackDelivery);
+
+    TAutoPtr<TEventHandle<NGRpcService::TEvRequestAuthAndCheck>> request =
+        reinterpret_cast<TEventHandle<NGRpcService::TEvRequestAuthAndCheck>*>(ieh.release());
+
+    TActorId fakeGrpcRequestProxy = runtime->AllocateEdgeActor();
+    runtime->Register(CreateGrpcRequestCheckActor<NGRpcService::TEvRequestAuthAndCheck>(
+        fakeGrpcRequestProxy,
+        describeSchemeResult,
+        std::move(securityObject),
+        request,
+        NGRpcService::CreateGRpcProxyCounters(runtime->GetAppData().Counters),
+        false,
+        setup.RootAttributes,
+        nullptr,
+        {
+            .UseAccessService = true,
+            .NeedClusterAccessResourceCheck = true,
+            .AccessServiceType = runtime->GetAppData().AuthConfig.GetAccessServiceType(),
+        }));
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = runtime->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
+    UNIT_ASSERT_C(result, "Expected TEvRequestAuthAndCheckResult");
+    return result;
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(HttpDatabaseAccessObserveMode) {
+
+Y_UNIT_TEST(DedicatedOwnDbOk) {
+    TTestSetup setup("user1", "/Root/db", {});
+    ConfigureDatabaseOnlyTokenAccess(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    auto* result = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithConnect("user1@as"));
+    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+    UNIT_ASSERT_EQUAL(result->Database, "/Root/db");
+}
+
+Y_UNIT_TEST(DedicatedNoConnectRightButSuccess) {
+    TTestSetup setup("user1", "/Root/db", {});
+    ConfigureDatabaseOnlyTokenAccess(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    auto* result = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
+}
+
+Y_UNIT_TEST(ServerlessOwnDbOk) {
+    TTestSetup setup("user1", "/Root/serverless", {});
+    ConfigureDatabaseOnlyTokenAccess(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/serverless", 2);
+    describeSchemeResult.MutablePathDescription()->MutableSelf()->SetPathType(NKikimrSchemeOp::EPathTypeExtSubDomain);
+    auto* result = RunHttpAuthCheck(setup, "/Root/serverless", describeSchemeResult, MakeSecurityObjectWithConnect("user1@as"));
+    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+}
+
+Y_UNIT_TEST(ServerlessForeignNoConnectRight) {
+    TTestSetup setup("user1", "/Root/foreign", {});
+    ConfigureDatabaseOnlyTokenAccess(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/foreign", 3);
+    describeSchemeResult.MutablePathDescription()->MutableSelf()->SetPathType(NKikimrSchemeOp::EPathTypeExtSubDomain);
+    auto* result = RunHttpAuthCheck(setup, "/Root/foreign", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
+}
+
+Y_UNIT_TEST(SharedHostNotADatabase) {
+    TTestSetup setup("user1", "/Root/shared", {});
+    ConfigureDatabaseOnlyTokenAccess(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupSharedHostSubDomain(setup.GetRuntime(), describeSchemeResult, "/Root/shared");
+    auto* result = RunHttpAuthCheck(setup, "/Root/shared", describeSchemeResult, MakeSecurityObjectWithConnect("user1@as"));
+    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NotADatabase);
+}
+
+Y_UNIT_TEST(EmptyDatabase) {
+    TTestSetup setup("user1", "/Root/db", {});
+    ConfigureDatabaseOnlyTokenAccess(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    auto* result = RunHttpAuthCheck(setup, "", describeSchemeResult, MakeSecurityObjectWithConnect("user1@as"));
+    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::EmptyDatabase);
+}
+
+Y_UNIT_TEST(RootDatabase) {
+    TTestSetup setup("user1", "/Root", {});
+    ConfigureDatabaseOnlyTokenAccess(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root", 1);
+    auto* result = RunHttpAuthCheck(setup, "/Root", describeSchemeResult, MakeSecurityObjectWithConnect("user1@as"));
+    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::RootDatabase);
+}
+
+Y_UNIT_TEST(ViewerTokenSkipsVerdict) {
+    TTestSetup setup("user1", "/Root/db", {});
+    ConfigureViewerTokenAccess(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    auto* result = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+}
+
+Y_UNIT_TEST(FlagOffZeroDiff) {
+    TTestSetup setup("user1", "/Root/db", {});
+    ConfigureDatabaseOnlyTokenAccess(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    auto* result = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect(), false);
+    UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+}
+
+} // HttpDatabaseAccessObserveMode
+

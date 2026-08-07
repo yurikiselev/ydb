@@ -18,6 +18,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseSchemeErrorCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseUnavailableCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr EmptyDatabaseNameCounter_;
+    ::NMonitoring::TDynamicCounters::TCounterPtr HttpMonitoringDatabaseAccessWouldDenyCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseRateLimitedCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConsumedRUCounter_;
     NMonitoring::THistogramPtr ThrottleDelayHistogram_;
@@ -40,6 +41,7 @@ public:
         DatabaseUnavailableCounter_ = group->GetCounter("databaseUnavailable", true);
 
         EmptyDatabaseNameCounter_ = group->GetCounter("emptyDatabaseName", true);
+        HttpMonitoringDatabaseAccessWouldDenyCounter_ = group->GetCounter("httpMonitoringDatabaseAccessWouldDeny", true);
 
         DatabaseRateLimitedCounter_ = group->GetCounter("api.grpc.request.throughput_quota_exceeded_count", true);
 
@@ -64,6 +66,10 @@ public:
 
     void IncEmptyDatabaseNameCounter() override {
         EmptyDatabaseNameCounter_->Inc();
+    }
+
+    void IncHttpMonitoringDatabaseAccessWouldDenyCounter() override {
+        HttpMonitoringDatabaseAccessWouldDenyCounter_->Inc();
     }
 
     void IncDatabaseRateLimitedCounter() override {
@@ -283,6 +289,10 @@ public:
 
     void IncEmptyDatabaseNameCounter() override {
         Common->IncEmptyDatabaseNameCounter();
+    }
+
+    void IncHttpMonitoringDatabaseAccessWouldDenyCounter() override {
+        Common->IncHttpMonitoringDatabaseAccessWouldDenyCounter();
     }
 
     void IncDatabaseRateLimitedCounter() override {
