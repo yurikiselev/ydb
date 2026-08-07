@@ -1892,7 +1892,7 @@ public:
         const TMaybe<TString>& ydbToken,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         const TAuditLogParts& auditLogParts,
-        EHttpDatabaseAccessVerdict databaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok
+        EHttpDatabaseAccessVerdict databaseAccessVerdict
     )
         : Database(database)
         , YdbToken(ydbToken)

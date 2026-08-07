@@ -41,7 +41,8 @@ public:
         DatabaseUnavailableCounter_ = group->GetCounter("databaseUnavailable", true);
 
         EmptyDatabaseNameCounter_ = group->GetCounter("emptyDatabaseName", true);
-        HttpMonitoringDatabaseAccessWouldDenyCounter_ = group->GetCounter("httpMonitoringDatabaseAccessWouldDeny", true);
+        HttpMonitoringDatabaseAccessWouldDenyCounter_ = group->GetCounter(
+            "httpMonitoringDatabaseAccessWouldDeny", true);
 
         DatabaseRateLimitedCounter_ = group->GetCounter("api.grpc.request.throughput_quota_exceeded_count", true);
 

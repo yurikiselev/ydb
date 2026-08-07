@@ -497,7 +497,8 @@ Y_UNIT_TEST(ServerlessOwnDbOk) {
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/serverless", 2);
     describeSchemeResult.MutablePathDescription()->MutableSelf()->SetPathType(NKikimrSchemeOp::EPathTypeExtSubDomain);
-    auto* result = RunHttpAuthCheck(setup, "/Root/serverless", describeSchemeResult, MakeSecurityObjectWithConnect("user1@as"));
+    auto* result = RunHttpAuthCheck(
+        setup, "/Root/serverless", describeSchemeResult, MakeSecurityObjectWithConnect("user1@as"));
     UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
 }
@@ -518,7 +519,8 @@ Y_UNIT_TEST(SharedHostNotADatabase) {
     ConfigureDatabaseOnlyTokenAccess(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupSharedHostSubDomain(setup.GetRuntime(), describeSchemeResult, "/Root/shared");
-    auto* result = RunHttpAuthCheck(setup, "/Root/shared", describeSchemeResult, MakeSecurityObjectWithConnect("user1@as"));
+    auto* result = RunHttpAuthCheck(
+        setup, "/Root/shared", describeSchemeResult, MakeSecurityObjectWithConnect("user1@as"));
     UNIT_ASSERT_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_EQUAL(result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NotADatabase);
 }

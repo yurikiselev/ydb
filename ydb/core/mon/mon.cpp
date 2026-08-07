@@ -82,7 +82,9 @@ void LogAuthorizedHttpRequest(
         : NGRpcService::EHttpDatabaseAccessVerdict::Ok;
     const bool wouldDeny = verdict != NGRpcService::EHttpDatabaseAccessVerdict::Ok;
     const TString verdictStr(NGRpcService::HttpDatabaseAccessVerdictToString(verdict));
-    if (wouldDeny && userToken && GetHighestAccessLevel(appData, userToken) == EAccessLevel::Database) {
+    if (wouldDeny && userToken &&
+        IsStrictDatabaseOnlyToken(appData, userToken->GetSerializedToken()))
+    {
         NGRpcService::CreateGRpcProxyCounters(appData->Counters)->IncHttpMonitoringDatabaseAccessWouldDenyCounter();
     }
     YDB_LOG_NOTICE(

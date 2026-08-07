@@ -254,6 +254,14 @@ public:
                 IsStrictDatabaseOnlyToken(AppData(), TBase::GetSerializedToken()))
             {
                 HttpDatabaseAccessVerdict_ = EvaluateHttpDatabaseAccessVerdict();
+                if (HttpDatabaseAccessVerdict_ != EHttpDatabaseAccessVerdict::Ok) {
+                    LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                        "HTTP monitoring database access would deny"
+                        << ", database: " << CheckedDatabaseName_
+                        << ", verdict: " << HttpDatabaseAccessVerdictToString(HttpDatabaseAccessVerdict_)
+                        << ", user: " << TBase::GetUserSID()
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+                }
             }
         }
 
@@ -739,9 +747,7 @@ private:
             return {false, std::nullopt};
         }
 
-        if (!(IsHttpRequest && AppData()->FeatureFlags.GetEnableDatabaseAccessCheckLoggingForHttpMonitoring())) {
-            Counters_->IncDatabaseAccessDenyCounter();
-        }
+        Counters_->IncDatabaseAccessDenyCounter();
 
         if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
             return {false, std::nullopt};
@@ -791,6 +797,9 @@ private:
 
         const auto& parsedToken = TBase::GetParsedToken();
         if (!parsedToken) {
+            // An empty token at this point means that anonymous access is allowed by the system configuration,
+            // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
+            // validated earlier in the request processing pipeline.
             return EHttpDatabaseAccessVerdict::Ok;
         }
 
