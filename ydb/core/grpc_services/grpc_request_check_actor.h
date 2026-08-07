@@ -250,8 +250,8 @@ public:
         GrpcRequestBaseCtx_->SetCounters(Counters_);
 
         if constexpr (IsHttpRequest) {
-            if (AppData()->FeatureFlags.GetEnableDatabaseAccessCheckLoggingForHttpMonitoring()
-                && IsStrictDatabaseOnlyToken(AppData(), TBase::GetSerializedToken()))
+            if (AppData()->FeatureFlags.GetEnableDatabaseAccessCheckLoggingForHttpMonitoring() &&
+                IsStrictDatabaseOnlyToken(AppData(), TBase::GetSerializedToken()))
             {
                 HttpDatabaseAccessVerdict_ = EvaluateHttpDatabaseAccessVerdict();
             }
@@ -697,7 +697,6 @@ private:
             return {false, std::nullopt};
         }
 
-
         // An empty token at this point means that anonymous access is allowed by the system configuration,
         // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
         // validated earlier in the request processing pipeline.
@@ -772,8 +771,8 @@ private:
         const auto& self = RequestSchemeData_.GetPathDescription().GetSelf();
         const auto selfPathId = TPathId(self.GetSchemeshardId(), self.GetPathId());
         const bool isDatabaseRootPath = domainKey == selfPathId;
-        const bool isSharedHostDatabase = resourceDomainKey == domainKey
-            && CheckedDatabaseName_ == AppData()->TenantName;
+        const bool isSharedHostDatabase = resourceDomainKey == domainKey &&
+            CheckedDatabaseName_ == AppData()->TenantName;
 
         const TString rootDatabase = CanonizePath(AppData()->DomainsInfo->GetDomain()->Name);
         if (CheckedDatabaseName_ == rootDatabase) {

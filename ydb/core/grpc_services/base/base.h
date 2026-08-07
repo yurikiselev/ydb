@@ -1887,7 +1887,13 @@ public:
         Issues.AddIssue(error);
     }
 
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts, EHttpDatabaseAccessVerdict databaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok)
+    TEvRequestAuthAndCheckResult(
+        const TString& database,
+        const TMaybe<TString>& ydbToken,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        const TAuditLogParts& auditLogParts,
+        EHttpDatabaseAccessVerdict databaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok
+    )
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
